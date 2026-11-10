@@ -22,15 +22,19 @@ typedef enum {
     OP_JZ = 0x12,
     OP_STORE = 0x13,
     OP_LOAD = 0x14,
+    OP_CALL = 0x15,
+    OP_RET = 0x16,
     OP_HALT = 0x00 
 
 } Opcode;
 
 
-
-
 #ifndef IS_STRING
 #define IS_STRING(x) (__builtin_types_compatible_p(__typeof__(x), char*) || __builtin_types_compatible_p(__typeof__(x), const char*) || __builtin_types_compatible_p(__typeof__(x), char[]) || __builtin_types_compatible_p(__typeof__(x), const char[]))
+#endif
+
+#ifndef IS_INT
+#define IS_INT(x) (__builtin_types_compatible_p(__typeof__(x), int)) || (__builtin_types_compatible_p(__typeof__(x), int*)) || (__builtin_types_compatible_p(__typeof__(x), int[])) || (__builtin_types_compatible_p(__typeof__(x), const int)) || (__builtin_types_compatible_p(__typeof__(x), const int[]))
 #endif
 
 #define MAX_MEM_SIZE 4096 // 4KB
@@ -45,7 +49,7 @@ uint8_t memory[MAX_MEM_SIZE];
 int stack[STACK_SIZE];
 int pc = 0; // program counter
 int sp = -1; //stack counter
-
+int storage[256];
 
 void start(){
     bool start = true;
@@ -142,7 +146,7 @@ void start(){
         else if (instruction == OP_JMP)
         {
             uint16_t target = memory[pc++];
-            pc = memory[target];
+            pc = target;
         }
         //jump equals gelecek..
         else if (instruction == OP_JMPE)
@@ -153,7 +157,7 @@ void start(){
 
             if (a == b)
             {
-                pc = memory[target]; // inidisi en sonki seçilmiş indise eşitledik
+                pc = target; // inidisi en sonki seçilmiş indise eşitledik
             }
             else{ continue; }            
         }
@@ -166,7 +170,8 @@ void start(){
             
             if (a != b)
             {
-                pc = memory[target];
+                pc = target;
+
             }else{ continue; }
             
 
@@ -185,6 +190,25 @@ void start(){
             }
         }
         
+        
+        // load store
+        if (instruction == OP_STORE && sp >= 0)
+        { // when used "Push" and "Store" it will push to the indicated point where storage is held
+            
+            uint8_t address = memory[pc++];
+
+            int64_t value = stack[sp--];
+
+            storage[address] = value;  
+        }
+        else if (instruction == OP_LOAD) // eğer ilk satır varsa program devam etsin diye safety caution.
+        {
+            uint8_t address = memory[pc++];
+
+            stack[++sp] = storage[address];
+                        
+        }
+
         
         
         else if (instruction == OP_HALT)
