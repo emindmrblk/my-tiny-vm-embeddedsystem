@@ -90,7 +90,7 @@ void start(){
             if (sp >= 1)
             {
                 uint8_t situation = NEQUALS;
-                size_t a = (size_t)stack[sp--]; // dediğin doğru aslında da yapacak  bir şey yok.
+                size_t a = (size_t)stack[sp--];
                 size_t b = (size_t)stack[sp--];
 
                 /*if (IS_STRING(a) && IS_STRING(b) && strcmp(a,b)) // elde ettiğimiz şeye göre aslında her fonksiyona yazılması gereken kontrol
@@ -209,6 +209,17 @@ void start(){
                         
         }
 
+
+        else if (instruction == OP_RET)
+        {
+            
+        }
+        else if (instruction == OP_CALL)
+        {
+            
+        }
+        
+        
         
         
         else if (instruction == OP_HALT)
