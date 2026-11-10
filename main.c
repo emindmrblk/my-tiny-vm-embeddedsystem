@@ -24,9 +24,21 @@ typedef enum {
     OP_LOAD = 0x14,
     OP_CALL = 0x15,
     OP_RET = 0x16,
+    OP_DUP = 0x17,
+    OP_SWAP = 0x18,
+    OP_DROP = 0x19,
+    OP_POP = 0x20,
     OP_HALT = 0x00 
 
 } Opcode;
+
+typedef struct
+{
+    bool Zero_Flag;
+    bool Sign_Flag;
+    bool Carry_Flag;
+
+} flags;
 
 
 #ifndef IS_STRING
@@ -50,6 +62,10 @@ int stack[STACK_SIZE];
 int pc = 0; // program counter
 int sp = -1; //stack counter
 int storage[256];
+int call_stack[256];
+int csp = -1;
+
+
 
 void start(){
     bool start = true;
@@ -89,7 +105,7 @@ void start(){
         {
             if (sp >= 1)
             {
-                uint8_t situation = NEQUALS;
+                flags f;
                 size_t a = (size_t)stack[sp--];
                 size_t b = (size_t)stack[sp--];
 
@@ -97,18 +113,18 @@ void start(){
                 { continue; }*/
                 if (a == b)
                 {
-                    printf("They are even."); situation = EQUALS;
-                }else if (a > b)
+                    f.Zero_Flag = EQUALS;
+                }
+                else if (a > b)
                 {
-                    printf("Last number bigger than first number"); situation = BIGGER;
-                }else if (b > a)
-                {
-                    printf("First number bigger than last number"); situation = SMALLER;
+                    f.Carry_Flag = EQUALS;
 
                 }
-                stack[++sp] = situation;
-            
-            
+                else if (b > a)
+                {
+                    f.Sign_Flag = EQUALS;
+                }
+                        
             }
             
         }
@@ -149,13 +165,12 @@ void start(){
             pc = target;
         }
         //jump equals gelecek..
-        else if (instruction == OP_JMPE)
+        flags f;
+        if (instruction == OP_JMPE)
         {
             uint16_t target = memory[pc++];
-            int64_t a = stack[sp--];
-            int64_t b = stack[sp--];
-
-            if (a == b)
+            
+            if (f.Zero_Flag)
             {
                 pc = target; // inidisi en sonki seçilmiş indise eşitledik
             }
@@ -165,10 +180,9 @@ void start(){
         else if (instruction == OP_JNE) // jump not equals
         {
             uint16_t target = memory[pc++];
-            int64_t a = stack[sp--]; // son girilen sayı
-            int64_t b = stack[sp--];//ilk girilen sayı
             
-            if (a != b)
+            
+            if (!f.Zero_Flag)
             {
                 pc = target;
 
@@ -179,10 +193,9 @@ void start(){
         else if (instruction == OP_JZ)
         {
             uint16_t target = memory[pc++];
-            int64_t condition = stack[sp--]; // sondaki eleman
 
-            if(condition == NEQUALS){ // sondaki elemansa 0 ise komut çalışır
-                pc = memory[target]; // en sonki gitmek istenen adrese ışınlanırız.
+            if(f.Zero_Flag){ // sondaki elemansa 0 ise komut çalışır
+                pc = target; // en sonki gitmek istenen adrese ışınlanırız.
             }
             else // 0 değilse değiştirmeyiz.
             {
@@ -192,7 +205,7 @@ void start(){
         
         
         // load store
-        if (instruction == OP_STORE && sp >= 0)
+        else if (instruction == OP_STORE && sp >= 0)
         { // when used "Push" and "Store" it will push to the indicated point where storage is held
             
             uint8_t address = memory[pc++];
@@ -201,7 +214,7 @@ void start(){
 
             storage[address] = value;  
         }
-        else if (instruction == OP_LOAD) // eğer ilk satır varsa program devam etsin diye safety caution.
+        else if (instruction == OP_LOAD) 
         {
             uint8_t address = memory[pc++];
 
@@ -210,18 +223,42 @@ void start(){
         }
 
 
-        else if (instruction == OP_RET)
-        {
-            
-        }
         else if (instruction == OP_CALL)
         {
-            
+            size_t hedef = 0;
+            hedef = memory[pc];   // call 50 mesela 50 olur hedef 
+            call_stack[++csp] = pc; // 0'ıncı indis 51'e eşit olur
+
+            pc = hedef; // hedef
+        }
+        else if (instruction == OP_RET)
+        {
+            pc = call_stack[csp--];// o sayının indisini verir yani geriye döneriz.
         }
         
+        // stack manipulation
+
+        else if (instruction == OP_DUP)
+        {
+            size_t duplicator = stack[sp++];
+            stack[sp++] = duplicator;
+        }
+        else if (instruction == OP_POP || instruction == OP_DROP)
+        {
+            sp--;
+        }
+        else if (instruction == OP_SWAP)
+        {
+            size_t swap1 = stack[sp];
+            size_t swap2 = stack[sp-1];
+
+            stack[sp] = swap2;
+            stack[sp-1] = swap1;
+        }
         
-        
-        
+
+
+    
         else if (instruction == OP_HALT)
         {
             start = false;
@@ -240,7 +277,8 @@ void start(){
 }
 
 
-int main(){
+int main()
+{
 
 }
 
