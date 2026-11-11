@@ -15,6 +15,9 @@
 #define IS_INT(x) (__builtin_types_compatible_p(__typeof__(x), int)) || (__builtin_types_compatible_p(__typeof__(x), int*)) || (__builtin_types_compatible_p(__typeof__(x), int[])) || (__builtin_types_compatible_p(__typeof__(x), const int)) || (__builtin_types_compatible_p(__typeof__(x), const int[]))
 #endif
 
+#define LIKELY(x) __builtin_expect(!!(x),1)
+#define UNLIKELY(x) __builtin_expect(!!(x),0) 
+
 //#define debug_mode
 
 #define MAX_MEM_SIZE 4096 // 4KB
@@ -180,7 +183,7 @@ int64_t memory_management_unit(int16_t target, int64_t value, char mode) {
     
     pageTable p = page[vpn]; 
 
-   
+
     if (!p.valid) {
         errHANDLER(EX_PAGE_FAULT); 
         return -1;
@@ -691,6 +694,8 @@ uint64_t Page_REPLACEMENT(){
     return minvpn;
     //fifo algorithm is easier compared to for and if's but lru algorithm always better when it needed.
 }
+
+
 
 
 int main()
