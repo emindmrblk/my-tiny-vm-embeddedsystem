@@ -98,7 +98,6 @@ typedef struct
 
 int64_t memory[MAX_MEM_SIZE];
 
-uint8_t physical_memory[16][64];
 
 int stack[STACK_SIZE];
 int pc = 0; // program counter
@@ -107,6 +106,7 @@ int storage[256];
 int call_stack[256];
 int csp = -1;
 static uint32_t total_INSTRUCTION = 0;
+static uint64_t global_clock = 0;
 
 
 void count_total_instruction(const char* filename){
@@ -126,53 +126,122 @@ typedef struct
     bool readable;
     bool writable;
     bool executable;
+    uint64_t last_accessed;
 
 } pageTable;
 
+typedef struct {
+    int16_t vpn;
+    int16_t frame_num;
+    bool readable;
+    bool writable;
+    bool valid;
+    uint64_t access;
+} TLBEntry;
+
 pageTable page[16];
+int64_t physical_memory[16][64];
+TLBEntry tlb[4];
+int tlb_index = 0;
 
-int64_t tlb[16][64];
 
-int64_t memory_management_unit(int16_t target, int64_t value, char mode){ // basic mmu 
-    int16_t vpn = target/64;
-    int16_t offset = target%64;
-    pageTable p = page[vpn];
-
-    if (vpn < 0 || vpn >=16)
+void mmuSystemConfig(){
+    for (int i = 0; i < 16; i++)
     {
-        errHANDLER(EX_SEGMENTATION_FAULT);
-         return -1;
+        page[i].executable=false;
+        page[i].readable=false;
+        page[i].writable = false;
+        page[i].valid = false;
     }
-    if (!p.valid)
-    {
-        err_Handler(EX_PAGE_FAULT);
+    // wr executable
+    page[0] = (pageTable){.frame_num = 0, .valid = true, .readable = true, .writable = false, .executable = true};
+
+    //wr non exec
+    page[1] = (pageTable){.frame_num = 1, .valid = true, .readable = true, .writable = true, .executable = false};
+    //wr non exec
+    page[15] = (pageTable){.frame_num = 5, .valid = true, .readable = true, .writable = true, .executable = false};
+    
+    for (int i = 0; i < 4; i++)
+    {   
+        tlb[i].valid = false;
+    }
+    
+}
+
+int64_t memory_management_unit(int16_t target, int64_t value, char mode) {
+    int16_t vpn = target / 64;
+    int16_t offset = target % 64;
+
+   
+    if (vpn < 0 || vpn >= 16) {
+        errHANDLER(EX_SEGMENTATION_FAULT);
+        return -1;
+    }
+    
+    pageTable p = page[vpn]; 
+
+   
+    if (!p.valid) {
+        errHANDLER(EX_PAGE_FAULT); 
         return -1;
     }
 
-    if (mode == 'w')
-    {
-        
-        if (!p.writable)
-        {
-            errHANDLER(EX_SEGMENTATION_FAULT);
-            return -1;
-        }
+    // tlb checker değişkenleri
+    bool tlbHIT = false;
+    bool preadable = false;
+    bool pwritable = false;
+    int16_t targetframe = -1;
 
-        return physical_memory[p.frame_num][offset];
-        
+    // 3. TLB ARAMASI
+    for (int i = 0; i < 4; i++) {
+        if (tlb[i].vpn == vpn && tlb[i].valid) {
+            tlbHIT = true;
+            targetframe = tlb[i].frame_num;
+            preadable = tlb[i].readable;
+            pwritable = tlb[i].writable;
+            break;
+        }
     }
-    else if (mode == 'r')
-    {
-        if (!p.writable)
-        {
-            errHANDLER(EX_SEGMENTATION_FAULT);
-            return -1;
-        }
 
-        physical_memory[p.frame_num][offset] = value;
-        return 0;
+    // 4. TLB MISS (Bulunamadıysa Page Table'dan al ve TLB'ye cache'le)
+    if (!tlbHIT) { 
+        targetframe = p.frame_num;
+        preadable = p.readable;
+        pwritable = p.writable;
+
+        // TLB slotuna yazma
+        tlb[tlb_index].vpn = vpn;
+        tlb[tlb_index].frame_num = p.frame_num;
+        tlb[tlb_index].readable = p.readable;
+        tlb[tlb_index].writable = p.writable;
+        tlb[tlb_index].valid = p.valid;
+        
+        tlb_index = (tlb_index + 1) % 4; 
     }
     
+    
+    global_clock++;
+    page[vpn].last_accessed = global_clock;
+
+    if (mode == 'w') {
+        if (!pwritable) { 
+            errHANDLER(EX_SEGMENTATION_FAULT);
+            return -1;
+        }
+        
+        physical_memory[targetframe][offset] = value;
+        return 0;
+    }
+    else if (mode == 'r') {
+        if (!preadable) { 
+            errHANDLER(EX_SEGMENTATION_FAULT);
+            return -1;
+        }
+       
+        return physical_memory[targetframe][offset];
+    }
+
+    return -1;
 }
     
 
@@ -199,6 +268,10 @@ void errHANDLER(err_Handler ex){
     else if (ex == EX_INVALID_OPCODE)
     {
         printf("Error: Invalid machine code!\n");
+    }
+    else if (ex == EX_PAGE_FAULT)
+    {
+        page[Page_REPLACEMENT()].valid = false; // to override whats been there when pushed again in the stack
     }
     
 }
@@ -600,6 +673,25 @@ char* reverse_the_command(const uint8_t *command, int count, InstructionInfo *in
     return NULL;
     
 }
+
+uint64_t Page_REPLACEMENT(){
+
+    //lru algorithm
+    int64_t min = INT64_MAX;
+    uint64_t minvpn = 0;
+    for (int16_t i = 0; i < 16; i++)
+    {
+        if (page[i].last_accessed < min)
+        {
+            min = page[i].last_accessed;
+            minvpn = i;
+        }
+    }
+    
+    return minvpn;
+    //fifo algorithm is easier compared to for and if's but lru algorithm always better when it needed.
+}
+
 
 int main()
 {
